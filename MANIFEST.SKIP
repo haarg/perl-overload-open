@@ -32,6 +32,10 @@
 \bBUILD.COM$
 \bbuild.com$
 
+# avoid XS generated files
+\.bs$
+\.[oc]$
+
 # and Module::Build::Tiny generated files
 \b_build_params$
 
