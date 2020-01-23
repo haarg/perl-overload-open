@@ -3,6 +3,8 @@ use strict;
 use warnings;
 use 5.004_000;
 use XSLoader;
+use Symbol ();
+
 our $VERSION = '1.9.6';
 our $GLOBAL_OPEN;
 our $GLOBAL_SYSOPEN;
@@ -28,6 +30,69 @@ sub _install_sysopen; # Provided by open.xs
 XSLoader::load( 'overload::open', $VERSION );
 _install_open();
 _install_sysopen();
+
+sub parse_open_args :lvalue {
+    my $fh = $_[0];
+    my $mode;
+    my $filename;
+    if (defined $fh && !ref $fh) {
+        my $caller = caller(2);
+        no strict 'refs';
+        $fh = Symbol::qualify_to_ref($filename, $caller);
+    }
+
+    if (@_ <= 2) {
+        if (@_ == 1) {
+            $filename = ${ $fh };
+        }
+        else {
+            $filename = $_[1];
+        }
+        s/\A\s+//, s/\s+\z// for $filename;
+
+        if ($filename =~ /\A\s*-\s*\z/) {
+            $mode = '<&';
+            $filename = \*STDIN;
+        }
+        elsif ($filename =~ s{\s*\|\z}{}) {
+            $mode = '-|';
+        }
+        elsif ($filename =~ s{\A(+?<|+?>|+?>>|\||>>?&=?|<&=?)\s*}{}) {
+            if ( $1 eq '|' ) {
+                $mode = '|-';
+            }
+            else {
+                $mode = $1;
+            }
+
+            if ($filename eq '-' && $mode =~ /\A(?:<|>|>>)\z/) {
+                $mode .= '&';
+                $file = $mode eq '<' ? \*STDIN : \*STDOUT;
+            }
+        }
+        else {
+            $mode = '<';
+        }
+    }
+    elsif (@_ > 2) {
+        ($mode, $filename) = @_[1,2];
+    }
+
+    s/\A\s+//, s/\s+\z// for $mode;
+
+    if ($mode =~ /\A(?:<|>>?)&/) {
+        #TODO: check implementation
+        if ($mode =~ /=\z/ && $filename =~ /\A[0-9]+\z/) {
+            $filename = 0 + $filename;
+        }
+        elsif (!ref $filename) {
+            my $caller = caller(2);
+            $filename = Symbol::qualify_to_ref($filename, $caller);
+        }
+    }
+
+    (defined $fh ? $fh : $_[0], $mode, $filename, @_[3 .. $#_]);
+}
 
 q[Open sesame seed.];
 
